@@ -138,13 +138,17 @@ Rules:
 
 Return ONLY the post text, nothing else."""
 
-    response = client.chat.completions.create(
+       response = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=1200,
+        max_tokens=2500,
         temperature=0.8,
     )
-    return response.choices[0].message.content.strip()
+    result = response.choices[0].message.content.strip()
+    if not result:
+        print("WARNING: Groq returned empty content. Finish reason:", response.choices[0].finish_reason)
+        raise ValueError("Empty post generated — aborting to avoid posting blank content.")
+    return result
 
 
 def post_to_linkedin(text, image_url):
