@@ -2,3 +2,4 @@ requests
 groq
 yfinance
 feedparser
+matplotlib
