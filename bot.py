@@ -1,4 +1,5 @@
 import os
+import base64
 import requests
 import yfinance as yf
 import feedparser
@@ -7,8 +8,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from groq import Groq
 
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]
-MAKE_URL     = os.environ["MAKE_WEBHOOK_URL"]
+GROQ_API_KEY  = os.environ["GROQ_API_KEY"]
+MAKE_URL      = os.environ["MAKE_WEBHOOK_URL"]
+IMGBB_API_KEY = os.environ["IMGBB_API_KEY"]
 
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -91,18 +93,19 @@ def generate_chart(data, path="chart.png"):
 
 def upload_image(path):
     with open(path, "rb") as f:
-        upload = requests.post(
-            "https://tmpfiles.org/api/v1/upload",
-            files={"file": f},
-            timeout=60
-        )
-    print("tmpfiles status:", upload.status_code)
-    print("tmpfiles response:", upload.text[:500])
+        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    upload = requests.post(
+        "https://api.imgbb.com/1/upload",
+        data={"key": IMGBB_API_KEY, "image": image_b64},
+        timeout=60
+    )
+    print("imgbb status:", upload.status_code)
+    print("imgbb response:", upload.text[:500])
     upload_data = upload.json()
 
-    if upload_data.get("status") == "success":
-        raw_url = upload_data["data"]["url"]
-        return raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+    if upload_data.get("success"):
+        return upload_data["data"]["url"]
     else:
         print("Image upload failed:", upload_data)
         return None
