@@ -6,6 +6,8 @@ import feedparser
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from groq import Groq
 
 GROQ_API_KEY  = os.environ["GROQ_API_KEY"]
@@ -14,7 +16,13 @@ IMGBB_API_KEY = os.environ["IMGBB_API_KEY"]
 
 client = Groq(api_key=GROQ_API_KEY)
 
-TICKERS = {
+CORE_TICKERS = {
+    "Bitcoin":   "BTC-USD",
+    "Gold":      "GC=F",
+    "Crude Oil": "CL=F",
+}
+
+WEEKDAY_TICKERS = {
     "Nifty 50": "^NSEI",
     "Sensex":   "^BSESN",
     "USD/INR":  "INR=X",
@@ -23,9 +31,16 @@ TICKERS = {
 RSS_FEED = "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
 
 
-def get_market_data():
+def get_run_context():
+    now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    mode = "morning" if now_ist.hour < 12 else "evening"
+    is_weekday = now_ist.weekday() < 5  # Mon=0 ... Sun=6
+    return mode, is_weekday
+
+
+def get_market_data(tickers):
     data = []
-    for name, symbol in TICKERS.items():
+    for name, symbol in tickers.items():
         try:
             hist = yf.Ticker(symbol).history(period="5d")
             if len(hist) < 2:
@@ -70,7 +85,7 @@ def generate_chart(data, path="chart.png"):
     pcts = [d["pct"] for d in data]
     colors = ["#1a9e5c" if p >= 0 else "#d9364a" for p in pcts]
 
-    fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
+    fig, ax = plt.subplots(figsize=(9, 5.5), dpi=150)
     bars = ax.bar(names, pcts, color=colors, width=0.5)
 
     for bar, pct in zip(bars, pcts):
@@ -78,13 +93,14 @@ def generate_chart(data, path="chart.png"):
         va = "bottom" if height >= 0 else "top"
         offset = 0.05 if height >= 0 else -0.05
         ax.text(bar.get_x() + bar.get_width() / 2, height + offset,
-                 f"{pct:+.2f}%", ha="center", va=va, fontsize=12, fontweight="bold")
+                 f"{pct:+.2f}%", ha="center", va=va, fontsize=11, fontweight="bold")
 
     ax.axhline(0, color="#333333", linewidth=0.8)
     ax.set_ylabel("% Change", fontsize=11)
     ax.set_title("Market Snapshot", fontsize=16, fontweight="bold", pad=15)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    plt.xticks(rotation=20, ha="right")
     fig.tight_layout()
     fig.savefig(path, facecolor="white")
     plt.close(fig)
@@ -111,9 +127,40 @@ def upload_image(path):
         return None
 
 
-def generate_post(market_text, headlines):
+def generate_post(market_text, headlines, mode, is_weekday):
+    if mode == "evening":
+        structure = """1. A short, punchy headline line (under 10 words, no hashtags, one relevant emoji e.g. \U0001F4CA or \U0001F4C9 or \U0001F4C8)
+2. A blank line
+3. A 2-3 sentence paragraph stating today's real closing numbers (from the data above) in plain, confident language
+4. A blank line
+5. A 3-4 sentence paragraph analyzing WHY the market moved this way, grounded in the real headlines above
+6. A blank line
+7. One forward-looking sentence: what to watch tomorrow/this week
+8. A blank line
+9. Exactly 20 relevant, specific hashtags space-separated on one line"""
+        framing = "This is an END-OF-DAY recap of today's session."
+    else:
+        structure = """1. A short, punchy headline line (under 10 words, no hashtags, one relevant emoji e.g. \U0001F305 or \U0001F4C8 or \U0001F4C9)
+2. A blank line
+3. A 2-3 sentence paragraph stating where things stand based on the last available data above (framed as "heading into today" context, not as today's result since markets haven't opened yet)
+4. A blank line
+5. A 3-4 sentence paragraph on what to watch TODAY, grounded in the real headlines above - key levels, events, or themes that could move markets. Use measured, analytical language (e.g. "could see pressure if X", "eyes will be on Y") - NEVER state a definitive prediction like "will hit X" or "will rally/crash"
+6. A blank line
+7. One sentence framing today as an opportunity to stay alert / disciplined
+8. A blank line
+9. Exactly 20 relevant, specific hashtags space-separated on one line"""
+        framing = "This is a MORNING OUTLOOK post, published before markets open. It must read as analysis of what to watch, never as a guaranteed prediction."
+
+    if is_weekday:
+        scope = "Indian equity markets (Nifty, Sensex, USD/INR) plus crypto, gold, and crude oil."
+    else:
+        scope = "It is a weekend - Indian equity markets are closed, so this post covers ONLY crypto, gold, and crude oil, which trade independent of weekday market hours. Do not mention Nifty, Sensex, or Indian equities being open or closed unless briefly noting markets resume Monday."
+
     prompt = f"""You are a professional financial content writer creating a LinkedIn post
 for a finance professional's personal profile.
+
+{framing}
+Scope: {scope}
 
 Today's real market data:
 {market_text}
@@ -123,15 +170,7 @@ Today's real market headlines:
 
 Write a LinkedIn post that follows this EXACT structure, with blank lines between each section:
 
-1. A short, punchy headline line (under 10 words, no hashtags, can use one relevant emoji e.g. \U0001F4CA or \U0001F4C9 or \U0001F4C8)
-2. A blank line
-3. A 2-3 sentence paragraph stating today's real numbers (from the data above) in plain, confident language
-4. A blank line
-5. A 3-4 sentence paragraph analyzing WHY the market moved this way, grounded in the real headlines above
-6. A blank line
-7. One forward-looking sentence: what to watch tomorrow/this week
-8. A blank line
-9. Exactly 20 relevant, specific hashtags space-separated on one line (mix broad market tags like #StockMarket #Nifty50 #Sensex #Investing with niche ones like #FinancialAnalysis #MacroEconomics #IndianEconomy #WealthManagement #TradingInsights etc.)
+{structure}
 
 Rules:
 - No markdown formatting (no **, no #headers except the hashtags at the end)
@@ -162,8 +201,13 @@ def post_to_linkedin(text, image_url):
 
 
 if __name__ == "__main__":
+    mode, is_weekday = get_run_context()
+    print(f"Mode: {mode} | Weekday: {is_weekday}")
+
+    tickers = {**CORE_TICKERS, **WEEKDAY_TICKERS} if is_weekday else CORE_TICKERS
+
     print("Fetching market data...")
-    market_data = get_market_data()
+    market_data = get_market_data(tickers)
     market_text = format_market_text(market_data)
     print(market_text)
 
@@ -179,7 +223,7 @@ if __name__ == "__main__":
     print("Image URL:", image_url)
 
     print("Generating post...")
-    post_text = generate_post(market_text, headlines)
+    post_text = generate_post(market_text, headlines, mode, is_weekday)
     print(post_text)
 
     print("Posting to LinkedIn via Make.com...")
