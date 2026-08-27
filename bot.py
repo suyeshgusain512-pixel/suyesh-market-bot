@@ -1,5 +1,4 @@
 import os
-import io
 import requests
 import yfinance as yf
 import feedparser
@@ -121,7 +120,7 @@ Today's real market headlines:
 
 Write a LinkedIn post that follows this EXACT structure, with blank lines between each section:
 
-1. A short, punchy headline line (under 10 words, no hashtags, can use one relevant emoji e.g. 📊 or 📉 or 📈)
+1. A short, punchy headline line (under 10 words, no hashtags, can use one relevant emoji e.g. \U0001F4CA or \U0001F4C9 or \U0001F4C8)
 2. A blank line
 3. A 2-3 sentence paragraph stating today's real numbers (from the data above) in plain, confident language
 4. A blank line
@@ -138,7 +137,7 @@ Rules:
 
 Return ONLY the post text, nothing else."""
 
-       response = client.chat.completions.create(
+    response = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=2500,
@@ -147,7 +146,7 @@ Return ONLY the post text, nothing else."""
     result = response.choices[0].message.content.strip()
     if not result:
         print("WARNING: Groq returned empty content. Finish reason:", response.choices[0].finish_reason)
-        raise ValueError("Empty post generated — aborting to avoid posting blank content.")
+        raise ValueError("Empty post generated - aborting to avoid posting blank content.")
     return result
 
 
